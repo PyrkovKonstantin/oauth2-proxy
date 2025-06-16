@@ -61,6 +61,11 @@ type ProviderData struct {
 	loginURLParameterOverrides map[string]*regexp.Regexp
 
 	BackendLogoutURL string
+
+	// For opentelemetry
+	// OtlpEndpoint string
+	// OtlpProtocol string
+	// OtlpInsecure bool
 }
 
 // Data returns the ProviderData

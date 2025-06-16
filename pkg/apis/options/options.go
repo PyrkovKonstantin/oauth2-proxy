@@ -36,6 +36,7 @@ type Options struct {
 	HtpasswdUserGroups      []string `flag:"htpasswd-user-group" cfg:"htpasswd_user_groups"`
 
 	Cookie    Cookie         `cfg:",squash"`
+	Opentelemetry OTLP 		 `cfg:",squash"`
 	Session   SessionOptions `cfg:",squash"`
 	Logging   Logging        `cfg:",squash"`
 	Templates Templates      `cfg:",squash"`
@@ -106,6 +107,7 @@ func NewOptions() *Options {
 		RealClientIPHeader:       "X-Real-IP",
 		ForceHTTPS:               false,
 		Cookie:                   cookieDefaults(),
+		Opentelemetry: 			  otlpDefaults(),
 		Session:                  sessionOptionsDefaults(),
 		Templates:                templatesDefaults(),
 		SkipAuthPreflight:        false,
@@ -165,6 +167,7 @@ func NewFlagSet() *pflag.FlagSet {
 	flagSet.AddFlagSet(cookieFlagSet())
 	flagSet.AddFlagSet(loggingFlagSet())
 	flagSet.AddFlagSet(templatesFlagSet())
+	flagSet.AddFlagSet(otlpFlagSet())
 
 	return flagSet
 }

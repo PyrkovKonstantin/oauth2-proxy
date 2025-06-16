@@ -81,6 +81,7 @@ type apiRoute struct {
 // OAuthProxy is the main authentication proxy
 type OAuthProxy struct {
 	CookieOptions *options.Cookie
+	OpentelemetryOptions *options.OTLP
 	Validator     func(string) bool
 
 	SignInPath string
@@ -218,6 +219,7 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 
 	p := &OAuthProxy{
 		CookieOptions: &opts.Cookie,
+		OpentelemetryOptions: &opts.Opentelemetry,
 		Validator:     validator,
 
 		SignInPath: fmt.Sprintf("%s/sign_in", opts.ProxyPrefix),
