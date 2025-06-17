@@ -16,51 +16,44 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
-
-type OtlpConfig struct {
-  	OtlpEndpoint string
-	OtlpProtocol string
-	OtlpInsecure bool
-	OtlpSamplingRate float64
-}
 
 func newExporter(ctx context.Context, cfg *options.OTLP) (sdktrace.SpanExporter, error) {
 
 	var exporter sdktrace.SpanExporter
-    var err error
+	var err error
 
-    switch cfg.Protocol {
-    case "http", "http/protobuf":
-        opts := []otlptracehttp.Option{
-            otlptracehttp.WithEndpoint(cfg.Endpoint),
-            otlptracehttp.WithURLPath("/v1/traces"),
-        }
+	switch cfg.Protocol {
+	case "http", "http/protobuf":
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint(cfg.Endpoint),
+			otlptracehttp.WithURLPath("/v1/traces"),
+		}
 
-		if cfg.Insecure {
-            opts = append(opts, otlptracehttp.WithInsecure())
-        }
-        exporter, err = otlptracehttp.New(ctx, opts...)
-        
-    case "grpc":
-        opts := []otlptracegrpc.Option{
-            otlptracegrpc.WithEndpoint(cfg.Endpoint),
-        }
+		if !cfg.Insecure {
+			opts = append(opts, otlptracehttp.WithInsecure())
+		}
+		exporter, err = otlptracehttp.New(ctx, opts...)
 
-		if cfg.Insecure {
-            opts = append(opts, otlptracegrpc.WithInsecure())
-        }
+	case "grpc":
+		opts := []otlptracegrpc.Option{
+			otlptracegrpc.WithEndpoint(cfg.Endpoint),
+		}
 
-        exporter, err = otlptracegrpc.New(ctx, opts...)
-        
-    default:
-        return nil, fmt.Errorf("unsupported OTLP protocol: %s", cfg.Protocol)
-    }
+		if !cfg.Insecure {
+			opts = append(opts, otlptracegrpc.WithInsecure())
+		}
 
-    if err != nil {
-        return nil, fmt.Errorf("failed to create exporter: %w", err)
-    }
+		exporter, err = otlptracegrpc.New(ctx, opts...)
+
+	default:
+		return nil, fmt.Errorf("unsupported OTLP protocol: %s", cfg.Protocol)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exporter: %w", err)
+	}
 
 	return exporter, nil
 }
@@ -102,48 +95,18 @@ func newMeterProvider(resource *resource.Resource) (*sdkmetric.MeterProvider, er
 	return meterProvider, nil
 }
 
-// func InitTracer(ctx context.Context, cfg OtlpConfig, appName string) func() {
-// 	var shutdownFunctions []func(context.Context) error
-
-// 	resource, err := newResource(ctx, appName)
-
-// 	if err != nil {
-// 		logger.Errorf("Failed to create the OTLP resource: %v", err)
-// 	}
-
-// 	exporter, err := newExporter(ctx, cfg)
-
-// 	if err != nil {
-// 		logger.Errorf("Failed to create the OTLP resource: %v", err)
-// 	}
-
-
-// 	batchSpanProcessor := sdktrace.NewBatchSpanProcessor(exporter)
-// 	tracerProvider := newTraceProvider(resource, batchSpanProcessor)
-// 	otel.SetTracerProvider(tracerProvider)
-// 	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-// 	return func() {
-// 		err := tracerProvider.Shutdown(ctx)
-// 		if err != nil {
-// 			logger.Errorf("Failed to gracefully shutdown the tracer provider: %v", err)
-// 		}
-// 		cancel()
-// 	}
-// }
-
-func InitialiseOpentelemetry(ctx context.Context, cfg *options.OTLP, appName string) []func(context.Context) error {
+func InitializeOpentelemetry(ctx context.Context, cfg *options.OTLP, appName string) []func(context.Context) error {
 	var shutdownFunctions []func(context.Context) error
 
 	resource, err := newResource(ctx, appName)
-	
+
 	if err != nil {
-		logger.Errorf("Failed to create the OTLP resource: %v", err)
+		logger.Errorf("[OTEL] Failed to create the OTLP resource: %v", err)
 	}
 
 	exporter, err := newExporter(ctx, cfg)
 	if err != nil {
-		logger.Errorf("Failed to create the OTLP exporeter: %v", err)
+		logger.Errorf("[OTEL] Failed to create the OTLP exporter: %v", err)
 	}
 
 	batchSpanProcessor := sdktrace.NewBatchSpanProcessor(exporter)
@@ -154,7 +117,7 @@ func InitialiseOpentelemetry(ctx context.Context, cfg *options.OTLP, appName str
 	meterProvider, err := newMeterProvider(resource)
 
 	if err != nil {
-		logger.Errorf("Failed to initialise the meter provider: %v", err)
+		logger.Errorf("[OTEL] Failed to initialize the meter provider: %v", err)
 	}
 
 	shutdownFunctions = append(shutdownFunctions, meterProvider.Shutdown)

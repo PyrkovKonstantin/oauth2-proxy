@@ -35,11 +35,11 @@ type Options struct {
 	HtpasswdFile            string   `flag:"htpasswd-file" cfg:"htpasswd_file"`
 	HtpasswdUserGroups      []string `flag:"htpasswd-user-group" cfg:"htpasswd_user_groups"`
 
-	Cookie    Cookie         `cfg:",squash"`
-	Opentelemetry OTLP 		 `cfg:",squash"`
-	Session   SessionOptions `cfg:",squash"`
-	Logging   Logging        `cfg:",squash"`
-	Templates Templates      `cfg:",squash"`
+	Cookie        Cookie         `cfg:",squash"`
+	Opentelemetry OTLP           `cfg:",squash"`
+	Session       SessionOptions `cfg:",squash"`
+	Logging       Logging        `cfg:",squash"`
+	Templates     Templates      `cfg:",squash"`
 
 	// Not used in the legacy config, name not allowed to match an external key (upstreams)
 	// TODO(JoelSpeed): Rename when legacy config is removed
@@ -107,7 +107,7 @@ func NewOptions() *Options {
 		RealClientIPHeader:       "X-Real-IP",
 		ForceHTTPS:               false,
 		Cookie:                   cookieDefaults(),
-		Opentelemetry: 			  otlpDefaults(),
+		Opentelemetry:            otlpDefaults(),
 		Session:                  sessionOptionsDefaults(),
 		Templates:                templatesDefaults(),
 		SkipAuthPreflight:        false,

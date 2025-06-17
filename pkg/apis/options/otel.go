@@ -7,20 +7,20 @@ import (
 )
 
 type OTLP struct {
-	Endpoint        string        `flag:"otlp-endpoint" cfg:"otlp_endpoint"`
-	Protocol        string        `flag:"otlp-protocol" cfg:"otlp_protocol"`
-	Insecure        bool          `flag:"otlp-insecure" cfg:"otlp_insecure"`
-	SamplingRate    float64       `flag:"otlp-sampling-rate" cfg:"otlp_sampling_rate"`
-	Headers         []string      `flag:"otlp-headers" cfg:"otlp_headers"`
-	Timeout         time.Duration `flag:"otlp-timeout" cfg:"otlp_timeout"`
-	Compression     string        `flag:"otlp-compression" cfg:"otlp_compression"`
-	Certificate     string        `flag:"otlp-certificate" cfg:"otlp_certificate"`
-	ClientKey       string        `flag:"otlp-client-key" cfg:"otlp_client_key"`
-	ClientCert      string        `flag:"otlp-client-cert" cfg:"otlp_client_cert"`
-	TracesEndpoint  string        `flag:"otlp-traces-endpoint" cfg:"otlp_traces_endpoint"`
-	TracesHeaders   []string      `flag:"otlp-traces-headers" cfg:"otlp_traces_headers"`
-	TracesTimeout   time.Duration `flag:"otlp-traces-timeout" cfg:"otlp_traces_timeout"`
-	TracesCompress  string        `flag:"otlp-traces-compression" cfg:"otlp_traces_compression"`
+	Endpoint       string        `flag:"otlp-endpoint" cfg:"otlp_endpoint"`
+	Protocol       string        `flag:"otlp-protocol" cfg:"otlp_protocol"`
+	Insecure       bool          `flag:"otlp-insecure" cfg:"otlp_insecure"`
+	SamplingRate   float64       `flag:"otlp-sampling-rate" cfg:"otlp_sampling_rate"`
+	Headers        []string      `flag:"otlp-headers" cfg:"otlp_headers"`
+	Timeout        time.Duration `flag:"otlp-timeout" cfg:"otlp_timeout"`
+	Compression    string        `flag:"otlp-compression" cfg:"otlp_compression"`
+	Certificate    string        `flag:"otlp-certificate" cfg:"otlp_certificate"`
+	ClientKey      string        `flag:"otlp-client-key" cfg:"otlp_client_key"`
+	ClientCert     string        `flag:"otlp-client-cert" cfg:"otlp_client_cert"`
+	TracesEndpoint string        `flag:"otlp-traces-endpoint" cfg:"otlp_traces_endpoint"`
+	TracesHeaders  []string      `flag:"otlp-traces-headers" cfg:"otlp_traces_headers"`
+	TracesTimeout  time.Duration `flag:"otlp-traces-timeout" cfg:"otlp_traces_timeout"`
+	TracesCompress string        `flag:"otlp-traces-compression" cfg:"otlp_traces_compression"`
 }
 
 func otlpFlagSet() *pflag.FlagSet {
@@ -46,19 +46,19 @@ func otlpFlagSet() *pflag.FlagSet {
 
 func otlpDefaults() OTLP {
 	return OTLP{
-		Endpoint:        "https://localhost:4318",
-		Protocol:        "grpc",
-		Insecure:        false,
-		SamplingRate:    1.0,
-		Headers:         nil,
-		Timeout:         10 * time.Second,
-		Compression:     "",
-		Certificate:     "",
-		ClientKey:       "",
-		ClientCert:      "",
-		TracesEndpoint:  "",
-		TracesHeaders:   nil,
-		TracesTimeout:   0,
-		TracesCompress:  "",
+		Endpoint:       "",
+		Protocol:       "",
+		Insecure:       true,
+		SamplingRate:   1.0,
+		Headers:        nil,
+		Timeout:        10 * time.Second,
+		Compression:    "",
+		Certificate:    "",
+		ClientKey:      "",
+		ClientCert:     "",
+		TracesEndpoint: "",
+		TracesHeaders:  nil,
+		TracesTimeout:  0,
+		TracesCompress: "",
 	}
 }

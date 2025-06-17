@@ -29,6 +29,7 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/cookies"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	proxyhttp "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/http"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/observability"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/version"
 
@@ -80,9 +81,9 @@ type apiRoute struct {
 
 // OAuthProxy is the main authentication proxy
 type OAuthProxy struct {
-	CookieOptions *options.Cookie
+	CookieOptions        *options.Cookie
 	OpentelemetryOptions *options.OTLP
-	Validator     func(string) bool
+	Validator            func(string) bool
 
 	SignInPath string
 
@@ -218,9 +219,9 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 	})
 
 	p := &OAuthProxy{
-		CookieOptions: &opts.Cookie,
+		CookieOptions:        &opts.Cookie,
 		OpentelemetryOptions: &opts.Opentelemetry,
-		Validator:     validator,
+		Validator:            validator,
 
 		SignInPath: fmt.Sprintf("%s/sign_in", opts.ProxyPrefix),
 
@@ -308,6 +309,17 @@ func (p *OAuthProxy) setupServer(opts *options.Options) error {
 		return fmt.Errorf("could not build metrics server: %v", err)
 	}
 
+	ctx := context.Background()
+
+	shutdownFunctions := observability.InitializeOpentelemetry(ctx, &opts.Opentelemetry, "oauth2-proxy")
+	defer func() {
+		for _, shutdownFunction := range shutdownFunctions {
+			if err := shutdownFunction(ctx); err != nil {
+				logger.Errorf("[OTEL] could not build metrics server: %v", err)
+			}
+		}
+	}()
+
 	p.server = proxyhttp.NewServerGroup(appServer, metricsServer)
 	return nil
 }
@@ -319,6 +331,7 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 	// Everything served by the router must go through the preAuthChain first.
 	r.Use(p.preAuthChain.Then)
 
+	r.Use(middleware.OtelMiddleware("oauth2-proxy"))
 	// Register the robots path writer
 	r.Path(robotsPath).HandlerFunc(p.pageWriter.WriteRobotsTxt)
 
