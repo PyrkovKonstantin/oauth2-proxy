@@ -155,6 +155,9 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("error initialising page writer: %v", err)
 	}
 
+	if opts.Opentelemetry.Protocol != "" {
+		opts.UpstreamServers.EnableOpenTelemetry = true
+	}
 	upstreamProxy, err := upstream.NewProxy(opts.UpstreamServers, opts.GetSignatureData(), pageWriter)
 	if err != nil {
 		return nil, fmt.Errorf("error initialising upstream proxy: %v", err)
@@ -182,6 +185,16 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 	}
 
 	logger.Printf("Cookie settings: name:%s secure(https):%v httponly:%v expiry:%s domains:%s path:%s samesite:%s refresh:%s", opts.Cookie.Name, opts.Cookie.Secure, opts.Cookie.HTTPOnly, opts.Cookie.Expire, strings.Join(opts.Cookie.Domains, ","), opts.Cookie.Path, opts.Cookie.SameSite, refresh)
+
+	ctx := context.Background()
+
+	_, err = observability.InitProvider(ctx, &opts.Opentelemetry, "oauth2-proxy")
+
+	if err != nil {
+		logger.Errorf("[OTEL] could not build metrics server: %v", err)
+		return nil, fmt.Errorf("[OTEL] failed to initialize telemetry: %v", err)
+	}
+	logger.Printf("Opentelemetry settings: endpoint:%s protocol:%s insecure:%v", opts.Opentelemetry.Endpoint, opts.Opentelemetry.Protocol, opts.Opentelemetry.Insecure)
 
 	trustedIPs := ip.NewNetSet()
 	for _, ipStr := range opts.TrustedIPs {
@@ -309,17 +322,6 @@ func (p *OAuthProxy) setupServer(opts *options.Options) error {
 		return fmt.Errorf("could not build metrics server: %v", err)
 	}
 
-	ctx := context.Background()
-
-	shutdownFunctions := observability.InitializeOpentelemetry(ctx, &opts.Opentelemetry, "oauth2-proxy")
-	defer func() {
-		for _, shutdownFunction := range shutdownFunctions {
-			if err := shutdownFunction(ctx); err != nil {
-				logger.Errorf("[OTEL] could not build metrics server: %v", err)
-			}
-		}
-	}()
-
 	p.server = proxyhttp.NewServerGroup(appServer, metricsServer)
 	return nil
 }
@@ -328,10 +330,12 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 	// Use the encoded path here so we can have the option to pass it on in the upstream mux.
 	// Otherwise something like /%2F/ would be redirected to / here already.
 	r := mux.NewRouter().UseEncodedPath()
+
+	r.Use(middleware.OtelMiddleware("oauth2-proxy"))
+
 	// Everything served by the router must go through the preAuthChain first.
 	r.Use(p.preAuthChain.Then)
 
-	r.Use(middleware.OtelMiddleware("oauth2-proxy"))
 	// Register the robots path writer
 	r.Path(robotsPath).HandlerFunc(p.pageWriter.WriteRobotsTxt)
 

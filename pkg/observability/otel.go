@@ -9,6 +9,7 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
@@ -19,10 +20,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
-func newExporter(ctx context.Context, cfg *options.OTLP) (sdktrace.SpanExporter, error) {
-
-	var exporter sdktrace.SpanExporter
-	var err error
+func newExporter(ctx context.Context, cfg *options.OTLP) (*otlptrace.Exporter, error) {
 
 	switch cfg.Protocol {
 	case "http", "http/protobuf":
@@ -31,31 +29,25 @@ func newExporter(ctx context.Context, cfg *options.OTLP) (sdktrace.SpanExporter,
 			otlptracehttp.WithURLPath("/v1/traces"),
 		}
 
-		if !cfg.Insecure {
+		if cfg.Insecure {
 			opts = append(opts, otlptracehttp.WithInsecure())
 		}
-		exporter, err = otlptracehttp.New(ctx, opts...)
+		return otlptracehttp.New(ctx, opts...)
 
 	case "grpc":
 		opts := []otlptracegrpc.Option{
 			otlptracegrpc.WithEndpoint(cfg.Endpoint),
 		}
 
-		if !cfg.Insecure {
+		if cfg.Insecure {
 			opts = append(opts, otlptracegrpc.WithInsecure())
 		}
 
-		exporter, err = otlptracegrpc.New(ctx, opts...)
+		return otlptracegrpc.New(ctx, opts...)
 
 	default:
 		return nil, fmt.Errorf("unsupported OTLP protocol: %s", cfg.Protocol)
 	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create exporter: %w", err)
-	}
-
-	return exporter, nil
 }
 
 func newResource(ctx context.Context, appName string) (*resource.Resource, error) {
@@ -69,6 +61,7 @@ func newResource(ctx context.Context, appName string) (*resource.Resource, error
 }
 
 func newTraceProvider(resource *resource.Resource, spanProcessor sdktrace.SpanProcessor) *sdktrace.TracerProvider {
+
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(resource),
@@ -95,6 +88,34 @@ func newMeterProvider(resource *resource.Resource) (*sdkmetric.MeterProvider, er
 	return meterProvider, nil
 }
 
+func InitProvider(ctx context.Context, cfg *options.OTLP, appName string) (*sdktrace.TracerProvider, error) {
+	exporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(cfg.Endpoint),
+		otlptracehttp.WithURLPath("/v1/traces"),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(appName),
+		)),
+		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SamplingRate)),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
+	return tp, nil
+}
+
 func InitializeOpentelemetry(ctx context.Context, cfg *options.OTLP, appName string) []func(context.Context) error {
 	var shutdownFunctions []func(context.Context) error
 
@@ -105,6 +126,7 @@ func InitializeOpentelemetry(ctx context.Context, cfg *options.OTLP, appName str
 	}
 
 	exporter, err := newExporter(ctx, cfg)
+
 	if err != nil {
 		logger.Errorf("[OTEL] Failed to create the OTLP exporter: %v", err)
 	}
@@ -125,7 +147,10 @@ func InitializeOpentelemetry(ctx context.Context, cfg *options.OTLP, appName str
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetMeterProvider(meterProvider)
 
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
 	return shutdownFunctions
 }

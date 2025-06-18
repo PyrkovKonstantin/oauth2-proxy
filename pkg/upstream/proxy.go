@@ -39,6 +39,10 @@ func NewProxy(upstreams options.UpstreamConfig, sigData *options.SignatureData, 
 			continue
 		}
 
+		if upstreams.EnableOpenTelemetry {
+			upstream.EnableOpenTelemetry = true
+		}
+
 		u, err := url.Parse(upstream.URI)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing URI for upstream %q: %w", upstream.ID, err)

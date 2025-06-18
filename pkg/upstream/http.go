@@ -11,6 +11,8 @@ import (
 	"github.com/mbland/hmacauth"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/middleware"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/options"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -167,7 +169,13 @@ func newReverseProxy(target *url.URL, upstream options.Upstream, errorHandler Pr
 	}
 
 	// Apply the customized transport to our proxy before returning it
-	proxy.Transport = transport
+	logger.Printf("[Upstream]: %v", upstream)
+
+	if upstream.EnableOpenTelemetry {
+		proxy.Transport = otelhttp.NewTransport(transport)
+	} else {
+		proxy.Transport = transport
+	}
 
 	return proxy
 }
