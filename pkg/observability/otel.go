@@ -21,9 +21,8 @@ import (
 )
 
 func newExporter(ctx context.Context, cfg *options.OTLP) (*otlptrace.Exporter, error) {
-
 	switch cfg.Protocol {
-	case "http", "http/protobuf":
+	case "http":
 		opts := []otlptracehttp.Option{
 			otlptracehttp.WithEndpoint(cfg.Endpoint),
 			otlptracehttp.WithURLPath("/v1/traces"),
@@ -53,8 +52,14 @@ func newExporter(ctx context.Context, cfg *options.OTLP) (*otlptrace.Exporter, e
 func newResource(ctx context.Context, appName string) (*resource.Resource, error) {
 	return resource.New(
 		ctx,
+		resource.WithTelemetrySDK(),
+		resource.WithProcess(),
+		resource.WithOS(),
+		resource.WithContainer(),
+		resource.WithHost(),
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(appName),
+			semconv.ServiceVersionKey.String("1.0.0"),
 			attribute.String("application", fmt.Sprintf("/%s", appName)),
 		),
 	)
@@ -89,68 +94,34 @@ func newMeterProvider(resource *resource.Resource) (*sdkmetric.MeterProvider, er
 }
 
 func InitProvider(ctx context.Context, cfg *options.OTLP, appName string) (*sdktrace.TracerProvider, error) {
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(cfg.Endpoint),
-		otlptracehttp.WithURLPath("/v1/traces"),
-		otlptracehttp.WithInsecure(),
-	)
+	exporter, err := newExporter(ctx, cfg)
+
 	if err != nil {
+		logger.Errorf("[OTEL] Failed to create the OTLP exporter: %v", err)
 		return nil, err
 	}
 
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName(appName),
-		)),
-		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(cfg.SamplingRate)),
-	)
+	resource, err := newResource(ctx, appName)
+
+	if err != nil {
+		logger.Errorf("[OTEL] Failed to create the OTLP resource: %v", err)
+		return nil, err
+	}
+
+	meterProvider, err := newMeterProvider(resource)
+
+	if err != nil {
+		logger.Errorf("[OTEL] Failed to create the OTLP meter: %v", err)
+	}
+	batchSpanProcessor := sdktrace.NewBatchSpanProcessor(exporter)
+	tp := newTraceProvider(resource, batchSpanProcessor)
 
 	otel.SetTracerProvider(tp)
+	otel.SetMeterProvider(meterProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
 
 	return tp, nil
-}
-
-func InitializeOpentelemetry(ctx context.Context, cfg *options.OTLP, appName string) []func(context.Context) error {
-	var shutdownFunctions []func(context.Context) error
-
-	resource, err := newResource(ctx, appName)
-
-	if err != nil {
-		logger.Errorf("[OTEL] Failed to create the OTLP resource: %v", err)
-	}
-
-	exporter, err := newExporter(ctx, cfg)
-
-	if err != nil {
-		logger.Errorf("[OTEL] Failed to create the OTLP exporter: %v", err)
-	}
-
-	batchSpanProcessor := sdktrace.NewBatchSpanProcessor(exporter)
-	tracerProvider := newTraceProvider(resource, batchSpanProcessor)
-
-	shutdownFunctions = append(shutdownFunctions, tracerProvider.Shutdown)
-
-	meterProvider, err := newMeterProvider(resource)
-
-	if err != nil {
-		logger.Errorf("[OTEL] Failed to initialize the meter provider: %v", err)
-	}
-
-	shutdownFunctions = append(shutdownFunctions, meterProvider.Shutdown)
-
-	otel.SetTracerProvider(tracerProvider)
-	otel.SetMeterProvider(meterProvider)
-
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
-
-	return shutdownFunctions
 }

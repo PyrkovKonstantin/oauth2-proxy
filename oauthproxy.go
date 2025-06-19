@@ -29,16 +29,15 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/cookies"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
 	proxyhttp "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/http"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/observability"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/util"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/version"
-
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/ip"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/middleware"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/observability"
 	requestutil "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/requests/util"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/upstream"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/util"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/version"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/providers"
 )
 
@@ -186,15 +185,23 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 
 	logger.Printf("Cookie settings: name:%s secure(https):%v httponly:%v expiry:%s domains:%s path:%s samesite:%s refresh:%s", opts.Cookie.Name, opts.Cookie.Secure, opts.Cookie.HTTPOnly, opts.Cookie.Expire, strings.Join(opts.Cookie.Domains, ","), opts.Cookie.Path, opts.Cookie.SameSite, refresh)
 
-	ctx := context.Background()
+	if opts.Opentelemetry.Endpoint != "" && opts.Opentelemetry.Protocol != "" {
 
-	_, err = observability.InitProvider(ctx, &opts.Opentelemetry, "oauth2-proxy")
+		ctx := context.Background()
 
-	if err != nil {
-		logger.Errorf("[OTEL] could not build metrics server: %v", err)
-		return nil, fmt.Errorf("[OTEL] failed to initialize telemetry: %v", err)
+		tp, err := observability.InitProvider(ctx, &opts.Opentelemetry, "oauth2-proxy")
+
+		if err != nil {
+			logger.Errorf("[OTEL] failed to initialize telemetry: %v", err)
+		}
+
+		defer func() {
+			if err := tp.Shutdown(ctx); err != nil {
+				logger.Printf("Error shutting down tracer provider: %v", err)
+			}
+		}()
+		logger.Printf("Opentelemetry settings: endpoint:%s protocol:%s insecure:%v", opts.Opentelemetry.Endpoint, opts.Opentelemetry.Protocol, opts.Opentelemetry.Insecure)
 	}
-	logger.Printf("Opentelemetry settings: endpoint:%s protocol:%s insecure:%v", opts.Opentelemetry.Endpoint, opts.Opentelemetry.Protocol, opts.Opentelemetry.Insecure)
 
 	trustedIPs := ip.NewNetSet()
 	for _, ipStr := range opts.TrustedIPs {
@@ -331,7 +338,9 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 	// Otherwise something like /%2F/ would be redirected to / here already.
 	r := mux.NewRouter().UseEncodedPath()
 
-	r.Use(middleware.OtelMiddleware("oauth2-proxy"))
+	if p.OpentelemetryOptions.Protocol != "" {
+		r.Use(middleware.OtelMiddleware("oauth2-proxy"))
+	}
 
 	// Everything served by the router must go through the preAuthChain first.
 	r.Use(p.preAuthChain.Then)

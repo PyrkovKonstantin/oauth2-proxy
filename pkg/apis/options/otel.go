@@ -26,8 +26,8 @@ type OTLP struct {
 func otlpFlagSet() *pflag.FlagSet {
 	flagSet := pflag.NewFlagSet("otlp", pflag.ExitOnError)
 
-	flagSet.String("otlp-endpoint", "https://localhost:4318", "OTLP endpoint base URL (scheme://host:port)")
-	flagSet.String("otlp-protocol", "grpc", "OTLP protocol (grpc|http/protobuf)")
+	flagSet.String("otlp-endpoint", "", "OTLP endpoint base URL (host:port)")
+	flagSet.String("otlp-protocol", "", "OTLP protocol (grpc|http/protobuf)")
 	flagSet.Bool("otlp-insecure", false, "disable TLS for OTLP connection")
 	flagSet.Float64("otlp-sampling-rate", 1.0, "sampling rate for traces (0.0 - 1.0)")
 	flagSet.StringSlice("otlp-headers", []string{}, "OTLP headers (key=value pairs)")
