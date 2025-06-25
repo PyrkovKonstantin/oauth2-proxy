@@ -65,6 +65,8 @@ var (
 
 	//go:embed static/*
 	staticFiles embed.FS
+
+	enableOtel = false
 )
 
 // allowedRoute manages method + path based allowlists
@@ -154,9 +156,6 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 		return nil, fmt.Errorf("error initialising page writer: %v", err)
 	}
 
-	if opts.Opentelemetry.Protocol != "" {
-		opts.UpstreamServers.EnableOpenTelemetry = true
-	}
 	upstreamProxy, err := upstream.NewProxy(opts.UpstreamServers, opts.GetSignatureData(), pageWriter)
 	if err != nil {
 		return nil, fmt.Errorf("error initialising upstream proxy: %v", err)
@@ -195,11 +194,14 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 			logger.Errorf("[OTEL] failed to initialize telemetry: %v", err)
 		}
 
+		enableOtel = true
+
 		defer func() {
 			if err := tp.Shutdown(ctx); err != nil {
 				logger.Printf("Error shutting down tracer provider: %v", err)
 			}
 		}()
+
 		logger.Printf("Opentelemetry settings: endpoint:%s protocol:%s insecure:%v", opts.Opentelemetry.Endpoint, opts.Opentelemetry.Protocol, opts.Opentelemetry.Insecure)
 	}
 
@@ -239,9 +241,8 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 	})
 
 	p := &OAuthProxy{
-		CookieOptions:        &opts.Cookie,
-		OpentelemetryOptions: &opts.Opentelemetry,
-		Validator:            validator,
+		CookieOptions: &opts.Cookie,
+		Validator:     validator,
 
 		SignInPath: fmt.Sprintf("%s/sign_in", opts.ProxyPrefix),
 
@@ -338,7 +339,7 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 	// Otherwise something like /%2F/ would be redirected to / here already.
 	r := mux.NewRouter().UseEncodedPath()
 
-	if p.OpentelemetryOptions.Protocol != "" {
+	if enableOtel {
 		r.Use(middleware.OtelMiddleware("oauth2-proxy"))
 	}
 

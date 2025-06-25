@@ -16,7 +16,6 @@ type UpstreamConfig struct {
 	// like: "/%2F/" which would otherwise be redirected to "/"
 	ProxyRawPath bool `json:"proxyRawPath,omitempty"`
 
-	EnableOpenTelemetry bool `json:"enableOpenTelemetry,omitempty"`
 	// Upstreams represents the configuration for the upstream servers.
 	// Requests will be proxied to this upstream if the path matches the request path.
 	Upstreams []Upstream `json:"upstreams,omitempty"`
@@ -94,6 +93,4 @@ type Upstream struct {
 	// Timeout is the maximum duration the server will wait for a response from the upstream server.
 	// Defaults to 30 seconds.
 	Timeout *Duration `json:"timeout,omitempty"`
-
-	EnableOpenTelemetry bool `json:"enableOpenTelemetry,omitempty"`
 }
