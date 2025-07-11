@@ -10,6 +10,7 @@ type OTLP struct {
 	Endpoint       string        `flag:"otlp-endpoint" cfg:"otlp_endpoint"`
 	Protocol       string        `flag:"otlp-protocol" cfg:"otlp_protocol"`
 	Insecure       bool          `flag:"otlp-insecure" cfg:"otlp_insecure"`
+	Metrics        bool          `flag:"otlp-metrics" cfg:"otlp-metrics"`
 	SamplingRate   float64       `flag:"otlp-sampling-rate" cfg:"otlp_sampling_rate"`
 	Headers        []string      `flag:"otlp-headers" cfg:"otlp_headers"`
 	Timeout        time.Duration `flag:"otlp-timeout" cfg:"otlp_timeout"`
@@ -29,6 +30,7 @@ func otlpFlagSet() *pflag.FlagSet {
 	flagSet.String("otlp-endpoint", "", "OTLP endpoint base URL (host:port)")
 	flagSet.String("otlp-protocol", "", "OTLP protocol (grpc|http/protobuf)")
 	flagSet.Bool("otlp-insecure", false, "disable TLS for OTLP connection")
+	flagSet.Bool("otlp-metrics", false, "metrics ON in console")
 	flagSet.Float64("otlp-sampling-rate", 1.0, "sampling rate for traces (0.0 - 1.0)")
 	flagSet.StringSlice("otlp-headers", []string{}, "OTLP headers (key=value pairs)")
 	flagSet.Duration("otlp-timeout", 10*time.Second, "OTLP export timeout")
@@ -48,6 +50,7 @@ func otlpDefaults() OTLP {
 	return OTLP{
 		Endpoint:       "",
 		Protocol:       "",
+		Metrics:        false,
 		Insecure:       true,
 		SamplingRate:   1.0,
 		Headers:        nil,

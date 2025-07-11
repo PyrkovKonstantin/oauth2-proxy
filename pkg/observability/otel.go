@@ -108,16 +108,18 @@ func InitProvider(ctx context.Context, cfg *options.OTLP, appName string) (*sdkt
 		return nil, err
 	}
 
-	meterProvider, err := newMeterProvider(resource)
+	if cfg.Metrics {
+		meterProvider, err := newMeterProvider(resource)
 
-	if err != nil {
-		logger.Errorf("[OTEL] Failed to create the OTLP meter: %v", err)
+		if err != nil {
+			logger.Errorf("[OTEL] Failed to create the OTLP meter: %v", err)
+		}
+		otel.SetMeterProvider(meterProvider)
 	}
 	batchSpanProcessor := sdktrace.NewBatchSpanProcessor(exporter)
 	tp := newTraceProvider(resource, batchSpanProcessor)
 
 	otel.SetTracerProvider(tp)
-	otel.SetMeterProvider(meterProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
