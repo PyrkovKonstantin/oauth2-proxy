@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -53,6 +54,7 @@ const (
 	oauthCallbackPath = "/callback"
 	authOnlyPath      = "/auth"
 	userInfoPath      = "/userinfo"
+	userOIDCInfoPath  = "/user_oidc_info"
 	staticPathPrefix  = "/static/"
 )
 
@@ -377,6 +379,8 @@ func (p *OAuthProxy) buildProxySubrouter(s *mux.Router) {
 	// The userinfo and logout endpoints needs to load sessions before handling the request
 	s.Path(userInfoPath).Handler(p.sessionChain.ThenFunc(p.UserInfo))
 	s.Path(signOutPath).Handler(p.sessionChain.ThenFunc(p.SignOut))
+
+	s.Path(userOIDCInfoPath).Handler(p.sessionChain.ThenFunc(p.UserOIDCInfo))
 }
 
 // buildPreAuthChain constructs a chain that should process every request before
@@ -758,6 +762,69 @@ func (p *OAuthProxy) UserInfo(rw http.ResponseWriter, req *http.Request) {
 		Email:             session.Email,
 		Groups:            session.Groups,
 		PreferredUsername: session.PreferredUsername,
+	}
+
+	if err := json.NewEncoder(rw).Encode(userInfo); err != nil {
+		logger.Printf("Error encoding user info: %v", err)
+		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func (p *OAuthProxy) UserOIDCInfo(rw http.ResponseWriter, req *http.Request) {
+	session, err := p.getAuthenticatedSession(rw, req)
+	if err != nil {
+		http.Error(rw, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
+	if session == nil {
+		if _, err := rw.Write([]byte("{}")); err != nil {
+			logger.Printf("Error encoding empty user info: %v", err)
+			p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+
+	data := *p.provider.Data()
+
+	init_req, err := http.NewRequest(http.MethodGet, data.ProfileURL.String(), nil)
+
+	if err != nil {
+		logger.Printf("HTTP request init failed : %v", err)
+		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	init_req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", session.AccessToken))
+
+	client := &http.Client{}
+
+	resp, err := client.Do(init_req)
+
+	if err != nil {
+		logger.Printf("HTTP request failed : %v", err)
+		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+
+	if err != nil {
+		logger.Printf("Failed to read response body : %v", err)
+		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var userInfo map[string]interface{}
+
+	if err := json.Unmarshal(body, &userInfo); err != nil {
+		logger.Printf("Failed to parse userinfo JSON: %v", err)
+		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	if err := json.NewEncoder(rw).Encode(userInfo); err != nil {
