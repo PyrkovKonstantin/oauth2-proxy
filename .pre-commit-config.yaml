@@ -12,10 +12,10 @@ repos:
     hooks:
       - id: go-build
         language: system
-        entry: env GOROOT=/home/kopyrkov/.gvm/gos/go1.24.5 /home/kopyrkov/.gvm/gos/go1.24.5/bin/go
+        entry: sh -c 'env GOROOT=$HOME/.gvm/gos/go1.24.5 $HOME/.gvm/gos/go1.24.5/bin/go build'
         args: ["build"]
         pass_filenames: false
         exclude: ^vendor/
       - id: golangci-lint
         language: system
-        entry: /home/kopyrkov/.gvm/pkgsets/go1.24.5/global/bin/golangci-lint
+        entry: sh -c '$HOME/.gvm/pkgsets/go1.24.5/global/bin/golangci-lint'
