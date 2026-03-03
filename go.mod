@@ -7,13 +7,11 @@ require (
 	github.com/Bose/minisentinel v0.0.0-20200130220412-917c5a9223bb
 	github.com/a8m/envsubst v1.4.3
 	github.com/alicebob/miniredis/v2 v2.35.0
-	github.com/benbjohnson/clock v1.3.5
 	github.com/bitly/go-simplejson v0.5.1
 	github.com/bsm/redislock v0.9.4
 	github.com/coreos/go-oidc/v3 v3.15.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/ghodss/yaml v1.0.0
 	github.com/go-jose/go-jose/v3 v3.0.4
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
@@ -21,7 +19,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/justinas/alice v1.2.0
-	github.com/mbland/hmacauth v0.0.0-20170912233209-44256dfd4bfa
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
@@ -41,6 +38,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.37.0
 	go.opentelemetry.io/otel/sdk/metric v1.37.0
 	go.opentelemetry.io/otel/trace v1.37.0
+	go.yaml.in/yaml/v3 v3.0.3
 	golang.org/x/crypto v0.40.0
 	golang.org/x/net v0.42.0
 	golang.org/x/oauth2 v0.30.0
@@ -50,13 +48,10 @@ require (
 	k8s.io/apimachinery v0.33.3
 )
 
-require go.yaml.in/yaml/v2 v2.4.2 // indirect
-
 require (
 	cloud.google.com/go/auth v0.16.3 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -98,7 +93,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/grpc v1.74.2 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	sigs.k8s.io/yaml v1.6.0
 )

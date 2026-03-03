@@ -29,7 +29,8 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/authentication/basic"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/cookies"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/encryption"
-	proxyhttp "github.com/oauth2-proxy/oauth2-proxy/v7/pkg/http"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/proxyhttp"
+
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/ip"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/middleware"
@@ -430,9 +431,10 @@ func buildSessionChain(opts *options.Options, provider providers.Provider, sessi
 	chain := alice.New()
 
 	if opts.SkipJwtBearerTokens {
-		sessionLoaders := []middlewareapi.TokenToSessionFunc{
-			provider.CreateSessionFromToken,
-		}
+		verifiers := opts.GetJWTBearerVerifiers()
+
+		sessionLoaders := make([]middlewareapi.TokenToSessionFunc, 0, len(verifiers)+1)
+		sessionLoaders = append(sessionLoaders, provider.CreateSessionFromToken)
 
 		for _, verifier := range opts.GetJWTBearerVerifiers() {
 			sessionLoaders = append(sessionLoaders,
@@ -1108,6 +1110,13 @@ func (p *OAuthProxy) Proxy(rw http.ResponseWriter, req *http.Request) {
 	session, err := p.getAuthenticatedSession(rw, req)
 	switch err {
 	case nil:
+		// Check against our authorization constraints and return forbidden
+		// if this request fails to satisfy them.
+		if !authOnlyAuthorize(req, session) {
+			http.Error(rw, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
+		}
+
 		// we are authenticated
 		p.addHeadersForProxying(rw, session)
 		p.headersChain.Then(p.upstreamProxy).ServeHTTP(rw, req)
