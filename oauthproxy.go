@@ -754,6 +754,8 @@ func (p *OAuthProxy) UserInfo(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	logger.Printf("Session user info: %v", session)
+
 	userInfo := struct {
 		User              string   `json:"user"`
 		Email             string   `json:"email"`
