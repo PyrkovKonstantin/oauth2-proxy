@@ -120,6 +120,8 @@ type OAuthProxy struct {
 	appDirector       redirect.AppDirector
 
 	encodeState bool
+	otelTracer  *observability.Tracer
+	otelCloser  io.Closer
 }
 
 // NewOAuthProxy creates a new instance of OAuthProxy from the options provided
@@ -187,25 +189,22 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 
 	logger.Printf("Cookie settings: name:%s secure(https):%v httponly:%v expiry:%s domains:%s path:%s samesite:%s refresh:%s", opts.Cookie.Name, opts.Cookie.Secure, opts.Cookie.HTTPOnly, opts.Cookie.Expire, strings.Join(opts.Cookie.Domains, ","), opts.Cookie.Path, opts.Cookie.SameSite, refresh)
 
-	if opts.Opentelemetry.Endpoint != "" && opts.Opentelemetry.Protocol != "" {
-
-		ctx := context.Background()
-
-		tp, err := observability.InitProvider(ctx, &opts.Opentelemetry, "oauth2-proxy")
-
+	var otelTracer *observability.Tracer
+	var otelCloser io.Closer
+	if opts.Opentelemetry.GRPCEndpoint != "" || opts.Opentelemetry.HTTPEndpoint != "" {
+		tracer, closer, err := observability.InitProvider(context.Background(), &opts.Opentelemetry)
 		if err != nil {
 			logger.Errorf("[OTEL] failed to initialize telemetry: %v", err)
-		}
-
-		enableOtel = true
-
-		defer func() {
-			if err := tp.Shutdown(ctx); err != nil {
-				logger.Printf("Error shutting down tracer provider: %v", err)
+		} else {
+			otelTracer = tracer
+			otelCloser = closer
+			enableOtel = true
+			if opts.Opentelemetry.GRPCEndpoint != "" {
+				logger.Printf("Opentelemetry settings: grpc-endpoint:%s insecure:%v", opts.Opentelemetry.GRPCEndpoint, opts.Opentelemetry.GRPCInsecure)
+			} else {
+				logger.Printf("Opentelemetry settings: http-endpoint:%s insecure:%v", opts.Opentelemetry.HTTPEndpoint, opts.Opentelemetry.HTTPInsecure)
 			}
-		}()
-
-		logger.Printf("Opentelemetry settings: endpoint:%s protocol:%s insecure:%v", opts.Opentelemetry.Endpoint, opts.Opentelemetry.Protocol, opts.Opentelemetry.Insecure)
+		}
 	}
 
 	trustedIPs := ip.NewNetSet()
@@ -244,8 +243,11 @@ func NewOAuthProxy(opts *options.Options, validator func(string) bool) (*OAuthPr
 	})
 
 	p := &OAuthProxy{
-		CookieOptions: &opts.Cookie,
-		Validator:     validator,
+		CookieOptions:        &opts.Cookie,
+		OpentelemetryOptions: &opts.Opentelemetry,
+		Validator:            validator,
+		otelTracer:           otelTracer,
+		otelCloser:           otelCloser,
 
 		SignInPath: fmt.Sprintf("%s/sign_in", opts.ProxyPrefix),
 
@@ -302,7 +304,15 @@ func (p *OAuthProxy) Start() error {
 		cancel() // cancel the context
 	}()
 
-	return p.server.Start(ctx)
+	err := p.server.Start(ctx)
+
+	if p.otelCloser != nil {
+		if shutdownErr := p.otelCloser.Close(); shutdownErr != nil {
+			logger.Printf("Error shutting down telemetry provider: %v", shutdownErr)
+		}
+	}
+
+	return err
 }
 
 func (p *OAuthProxy) setupServer(opts *options.Options) error {
@@ -343,7 +353,7 @@ func (p *OAuthProxy) buildServeMux(proxyPrefix string) {
 	r := mux.NewRouter().UseEncodedPath()
 
 	if enableOtel {
-		r.Use(middleware.OtelMiddleware("oauth2-proxy"))
+		r.Use(middleware.NewTracingMiddleware(p.otelTracer))
 	}
 
 	// Everything served by the router must go through the preAuthChain first.

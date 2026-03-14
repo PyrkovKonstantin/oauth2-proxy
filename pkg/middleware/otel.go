@@ -1,124 +1,73 @@
 package middleware
 
 import (
-	"context"
-	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/semconv/v1.17.0/httpconv"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func OtelMiddleware(appName string) mux.MiddlewareFunc {
+// NewTracingMiddleware returns a mux middleware that starts a server span for
+// every incoming request, following the same pattern as Traefik's entrypoint
+// tracing middleware.
+func NewTracingMiddleware(tracer *observability.Tracer) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger.Printf("🔵 [OtelMiddleware] Start processing request: %s %s", r.Method, r.URL.Path)
+			// Follow OTEL semantic conventions for HTTP span names:
+			// use the HTTP method as the span name since the route template
+			// is not always low-cardinality.
+			tracingCtx := observability.ExtractCarrierIntoContext(r.Context(), r.Header)
+			start := time.Now()
 
-			tracerProvider := otel.GetTracerProvider()
-			logger.Printf("  ├─ [Tracing] TracerProvider obtained: %T", tracerProvider)
-
-			tracer := tracerProvider.Tracer("main")
-			logger.Printf("  ├─ [Tracing] Tracer created: %s", "main")
-
-			savedCtx := r.Context()
-			logger.Printf("  ├─ [Context] Original context saved")
-
+			tracingCtx, span := tracer.Start(
+				tracingCtx,
+				r.Method,
+				trace.WithSpanKind(trace.SpanKindServer),
+				trace.WithTimestamp(start),
+			)
 			defer func() {
-				r = r.WithContext(savedCtx)
-				logger.Printf("  └─ [Context] Original context restored in defer")
+				span.End(trace.WithTimestamp(time.Now()))
 			}()
 
-			propagator := otel.GetTextMapPropagator()
-			ctx := propagator.Extract(savedCtx, propagation.HeaderCarrier(r.Header))
-			logger.Printf("HEADERS: %+v",r.Header)
-			logger.Printf("  ├─ [Propagation] Context extracted from headers. TraceID: %s", getTraceID(ctx))
+			// Enrich span with HTTP server attributes.
+			tracer.CaptureServerRequest(span, r)
 
-			opts := []oteltrace.SpanStartOption{
-				oteltrace.WithAttributes(httpconv.ServerRequest(appName, r)...),
-				oteltrace.WithSpanKind(oteltrace.SpanKindServer),
-			}
-			logger.Printf("  ├─ [Span] Start options prepared: %d options", len(opts))
-
-			var routePath string
+			// If we can resolve the matched route, record it as an attribute.
 			if route := mux.CurrentRoute(r); route != nil {
-				if path, err := route.GetPathTemplate(); err == nil {
-					routePath = path
-					opts = append(opts, oteltrace.WithAttributes(semconv.HTTPRoute(routePath)))
-					logger.Printf("  ├─ [Routing] Matched route path: %s", routePath)
+				if tmpl, err := route.GetPathTemplate(); err == nil {
+					span.SetAttributes(attribute.String("http.route", tmpl))
 				}
 			}
 
-			spanName := routePath
-			if spanName == "" {
-				spanName = fmt.Sprintf("HTTP %s route not found", r.Method)
-				logger.Printf("  ├─ [Routing] No route matched, using fallback span name: %s", spanName)
-			}
+			rw := newStatusRecorder(w)
+			next.ServeHTTP(rw, r.WithContext(tracingCtx))
 
-			ctx, span := tracer.Start(ctx, spanName, opts...)
-			logger.Printf("  ├─ [Span] Started: %s (TraceID: %s, SpanID: %s)",
-			spanName, getTraceID(ctx), getSpanID(ctx))
-			defer func() {
-				span.End()
-				logger.Printf("  ├─ [Span] Ended: %s (TraceID: %s)", spanName, getTraceID(ctx))
-			}()
-
-			r = r.WithContext(ctx)
-			logger.Printf("  ├─ [Context] Request context updated with new span")
-
-			rw := &responseWriter{w: w, status: 0}
-			logger.Printf("  ├─ [Response] Wrapper created")
-
-			logger.Printf("  ├─ [Chain] Calling next handler...")
-			next.ServeHTTP(rw, r)
-			logger.Printf("  ├─ [Chain] Next handler completed")
-
-			if rw.status > 0 {
-				span.SetAttributes(semconv.HTTPStatusCode(rw.status))
-				span.SetStatus(httpconv.ServerStatus(rw.status))
-				logger.Printf("  ├─ [Response] Status code recorded: %d", rw.status)
-			}
-
-			logger.Printf("🟢 [OtelMiddleware] Finished processing request: %s %s", r.Method, r.URL.Path)
+			tracer.CaptureResponse(span, rw.Header(), rw.status, trace.SpanKindServer)
 		})
 	}
 }
 
-func getTraceID(ctx context.Context) string {
-	if span := oteltrace.SpanFromContext(ctx); span != nil {
-		return span.SpanContext().TraceID().String()
-	}
-	return "no-trace-id"
-}
-
-func getSpanID(ctx context.Context) string {
-	if span := oteltrace.SpanFromContext(ctx); span != nil {
-		return span.SpanContext().SpanID().String()
-	}
-	return "no-span-id"
-}
-
-type responseWriter struct {
-	w      http.ResponseWriter
+// statusRecorder wraps http.ResponseWriter to capture the written status code.
+type statusRecorder struct {
+	http.ResponseWriter
 	status int
 }
 
-func (rw *responseWriter) Header() http.Header {
-	return rw.w.Header()
+func newStatusRecorder(w http.ResponseWriter) *statusRecorder {
+	return &statusRecorder{ResponseWriter: w}
 }
 
-func (rw *responseWriter) Write(b []byte) (int, error) {
-	if rw.status == 0 {
-		rw.status = http.StatusOK
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
 	}
-	return rw.w.Write(b)
-}
-
-func (rw *responseWriter) WriteHeader(statusCode int) {
-	rw.status = statusCode
-	rw.w.WriteHeader(statusCode)
+	return r.ResponseWriter.Write(b)
 }
