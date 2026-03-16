@@ -12,6 +12,7 @@ import (
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/apis/sessions"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/logger"
 	"github.com/oauth2-proxy/oauth2-proxy/v7/pkg/sessions/persistence"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -126,6 +127,9 @@ func buildSentinelClient(opts options.RedisStoreOptions) (Client, error) {
 		TLSConfig:        opt.TLSConfig,
 		ConnMaxIdleTime:  opt.ConnMaxIdleTime,
 	})
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		return nil, fmt.Errorf("error instrumenting redis sentinel client for tracing: %v", err)
+	}
 	return newClient(client), nil
 }
 
@@ -157,6 +161,9 @@ func buildClusterClient(opts options.RedisStoreOptions) (Client, error) {
 		TLSConfig:       opt.TLSConfig,
 		ConnMaxIdleTime: opt.ConnMaxIdleTime,
 	})
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		return nil, fmt.Errorf("error instrumenting redis cluster client for tracing: %v", err)
+	}
 	return newClusterClient(client), nil
 }
 
@@ -183,6 +190,9 @@ func buildStandaloneClient(opts options.RedisStoreOptions) (Client, error) {
 	}
 
 	client := redis.NewClient(opt)
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		return nil, fmt.Errorf("error instrumenting redis client for tracing: %v", err)
+	}
 	return newClient(client), nil
 }
 
