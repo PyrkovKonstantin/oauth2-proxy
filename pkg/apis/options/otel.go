@@ -24,9 +24,7 @@ type OTLP struct {
 
 func (o *OTLP) SetDefaults() {
 	o.ServiceName = "oauth2-proxy"
-	o.SampleRate = 1.0
-	o.HTTPEndpoint = "https://localhost:4318"
-}
+	o.SampleRate = 1.0}
 
 func otlpFlagSet() *pflag.FlagSet {
 	flagSet := pflag.NewFlagSet("otlp", pflag.ExitOnError)
@@ -37,7 +35,7 @@ func otlpFlagSet() *pflag.FlagSet {
 	flagSet.StringToString("otlp-grpc-headers", map[string]string{}, "headers sent with gRPC OTLP payloads")
 
 	// HTTP exporter
-	flagSet.String("otlp-http-endpoint", "https://localhost:4318", "HTTP OTLP collector endpoint (scheme://host:port/path)")
+	flagSet.String("otlp-http-endpoint", "", "HTTP OTLP collector endpoint (scheme://host:port/path)")
 	flagSet.Bool("otlp-http-insecure", false, "disable TLS for the HTTP OTLP connection")
 	flagSet.StringToString("otlp-http-headers", map[string]string{}, "headers sent with HTTP OTLP payloads")
 
