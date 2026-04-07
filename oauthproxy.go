@@ -791,12 +791,10 @@ func (p *OAuthProxy) UserOIDCInfo(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	rw.Header().Set("Content-Type", "application/json")
-	rw.WriteHeader(http.StatusOK)
 	if session == nil {
+		rw.Header().Set("Content-Type", "application/json")
 		if _, err := rw.Write([]byte("{}")); err != nil {
 			logger.Printf("Error encoding empty user info: %v", err)
-			p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
 		}
 		return
 	}
@@ -804,10 +802,9 @@ func (p *OAuthProxy) UserOIDCInfo(rw http.ResponseWriter, req *http.Request) {
 	data := *p.provider.Data()
 
 	init_req, err := http.NewRequest(http.MethodGet, data.ProfileURL.String(), nil)
-
 	if err != nil {
 		logger.Printf("HTTP request init failed : %v", err)
-		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -816,34 +813,32 @@ func (p *OAuthProxy) UserOIDCInfo(rw http.ResponseWriter, req *http.Request) {
 	client := &http.Client{}
 
 	resp, err := client.Do(init_req)
-
 	if err != nil {
 		logger.Printf("HTTP request failed : %v", err)
-		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-
 	if err != nil {
 		logger.Printf("Failed to read response body : %v", err)
-		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var userInfo map[string]interface{}
 
 	if err := json.Unmarshal(body, &userInfo); err != nil {
+		logger.Printf("Failed to parse userinfo resp Body: %v", body)
 		logger.Printf("Failed to parse userinfo JSON: %v", err)
-		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	rw.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(rw).Encode(userInfo); err != nil {
 		logger.Printf("Error encoding user info: %v", err)
-		p.ErrorPage(rw, req, http.StatusInternalServerError, err.Error())
 	}
 }
 
